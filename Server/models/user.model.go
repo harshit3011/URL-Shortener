@@ -12,3 +12,9 @@ type User struct {
 	CreatedAt    time.Time `json:"created_at" bson:"created_at"`
 	URLS         []URL     `json:"urls" bson:"urls"`
 }
+
+type RegisterUserDetails struct {
+	Username string `json:"username" validate:"required"`
+	Email    string `json:"email" validate:"required,email"`
+	Password string `json:"password" validate:"required,min=6"`
+}

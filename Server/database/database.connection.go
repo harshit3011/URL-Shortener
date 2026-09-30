@@ -30,6 +30,8 @@ func ConnectDB() *mongo.Client{
 
 }
 
+var Client *mongo.Client
+
 func OpenCollection(collection string, client *mongo.Client) *mongo.Collection {
 	err := godotenv.Load(".env")
 	if err != nil {
