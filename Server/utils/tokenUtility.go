@@ -150,18 +150,18 @@ func GetAccessToken(ctx *gin.Context) (string, error) {
 }
 
 func UpdateAllTokens(userId, accessToken, refreshToken string, client *mongo.Client) (err error) {
-	c, cancel := context.WithTimeout(context.Background(),3*time.Second)
+	c, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
 	updatedAt, _ := time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
 	updatedData := bson.D{
 		{Key: "$set", Value: bson.M{
-			"access_token": accessToken,
+			"access_token":  accessToken,
 			"refresh_token": refreshToken,
-			"updated_at": updatedAt,
+			"updated_at":    updatedAt,
 		}},
 	}
-	var userCollection *mongo.Collection = database.OpenCollection("users",client)
+	var userCollection *mongo.Collection = database.OpenCollection("users", client)
 
 	result, err := userCollection.UpdateOne(c, bson.M{"_id": userId}, updatedData)
 	if err != nil {
@@ -171,4 +171,22 @@ func UpdateAllTokens(userId, accessToken, refreshToken string, client *mongo.Cli
 		return errors.New("user not found while updating tokens")
 	}
 	return nil
+}
+
+func IsAccessTokenActive(userId, accessToken string, client *mongo.Client) (bool, error) {
+	c, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	userCollection := database.OpenCollection("users", client)
+	err := userCollection.FindOne(c, bson.M{
+		"_id":          userId,
+		"access_token": accessToken,
+	}).Err()
+	if errors.Is(err, mongo.ErrNoDocuments) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }

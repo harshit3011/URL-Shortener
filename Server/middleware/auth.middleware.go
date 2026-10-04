@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/harshit3011/URL-Shortener/database"
 	"github.com/harshit3011/URL-Shortener/utils"
 )
 
@@ -29,6 +30,19 @@ func AuthMiddleWare() gin.HandlerFunc {
 			ctx.Abort()
 			return
 		}
+
+		active, err := utils.IsAccessTokenActive(claims.UserID, token, database.Client)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to verify login session"})
+			ctx.Abort()
+			return
+		}
+		if !active {
+			ctx.JSON(http.StatusUnauthorized, gin.H{"error": "User is not logged in"})
+			ctx.Abort()
+			return
+		}
+
 		ctx.Set("user_id", claims.UserID)
 		ctx.Next()
 	}

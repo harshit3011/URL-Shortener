@@ -14,4 +14,5 @@ func BackendRoutes(router *gin.Engine) {
 	router.POST("/register", controllers.RegisterUser())
 	router.POST("/login", controllers.LoginUser())
 	router.POST("/logout", middleware.AuthMiddleWare(), controllers.LogoutUser())
+	router.GET("/urls",middleware.AuthMiddleWare(),controllers.GetUrls())
 }

@@ -208,10 +208,15 @@ func LogoutUser() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		id, exists := ctx.Get("user_id")
 		if !exists {
-			ctx.JSON(http.StatusNotFound, gin.H{"error": "User is not logged in"})
+			ctx.JSON(http.StatusUnauthorized, gin.H{"error": "User is not logged in"})
+			return
 		}
-		user_id := id.(string)
-		err := utils.UpdateAllTokens(user_id, "", "", database.Client)
+		userID, ok := id.(string)
+		if !ok {
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid user session"})
+			return
+		}
+		err := utils.UpdateAllTokens(userID, "", "", database.Client)
 		if err != nil {
 			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update tokens"})
 			return
