@@ -63,11 +63,13 @@ func RegisterUser() gin.HandlerFunc {
 			user.Email = registerUser.Email
 			user.Password = hashedPassword
 			user.CreatedAt = time.Now()
+			user.URLS = []models.URL{}
 
 			result, err := userCollection.InsertOne(c, user)
 
 			if err != nil {
 				ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Error in saving the user", "details": err.Error()})
+				return
 			}
 			ctx.JSON(http.StatusCreated, result)
 
