@@ -18,3 +18,9 @@ type RegisterUserDetails struct {
 	Email    string `json:"email" validate:"required,email"`
 	Password string `json:"password" validate:"required,min=6"`
 }
+
+type LoginUserDetails struct{
+	Username string `json:"username" validate:"required_without=Email"`
+	Email string `json:"email" validate:"required_without=Username"`
+	Password string `json:"password" validate:"required,min=6"`
+}

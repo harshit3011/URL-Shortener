@@ -5,10 +5,9 @@ import (
 	"log"
 	"os"
 
-	// "github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin"
-	"github.com/harshit3011/URL-Shortener/controllers"
 	"github.com/harshit3011/URL-Shortener/database"
+	"github.com/harshit3011/URL-Shortener/routes"
 	"github.com/joho/godotenv"
 )
 
@@ -16,11 +15,6 @@ func main() {
 
 	router := gin.Default()
 
-	router.GET("/hello", func(ctx *gin.Context) {
-		ctx.String(200,"Hello, this is my URL-shortener project")
-	})
-
-	router.POST("/registerUser",controllers.RegisterUser())
 	err := godotenv.Load(".env")
 	if err!=nil{
 		log.Fatal("Unable to find .env file")
@@ -45,6 +39,8 @@ func main() {
 			log.Fatalf("Failed to disconnect from MongoDB: %v", err)
 		}
 	}()
+
+	routes.BackendRoutes(router)
 
 	err= router.Run(":"+port); if err != nil {
 		log.Fatal("Server couldn't be connected!!")
