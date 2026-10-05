@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/harshit3011/URL-Shortener/database"
 	"github.com/harshit3011/URL-Shortener/models"
+	"github.com/redis/go-redis/v9"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
@@ -159,26 +160,51 @@ func ShortenUrl() gin.HandlerFunc {
 	}
 }
 
-
-func RedirectUrl() gin.HandlerFunc{
+func RedirectUrl() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		shortcode:=ctx.Param("shortcode")
+		shortcode := ctx.Param("shortcode")
 
-		urlCollection:= database.OpenCollection("urls",database.Client)
+		key := "url:" + shortcode
+		redisGetCtx, redisGetCancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer redisGetCancel()
 
-		filter:= bson.D{{
-			Key: "shortened_url", Value: shortcode,
-		}}
-		c, cancel:= context.WithTimeout(context.Background(),3*time.Second)
-		defer cancel()
-		var url models.URL
-		err:= urlCollection.FindOne(c, filter).Decode(&url)
+		cachedResult, err := database.RedisClient.Get(redisGetCtx, key).Result()
 
-		if err != nil {
-			ctx.JSON(http.StatusNotFound,gin.H{"error":"URL not found", "details":err.Error()})
-			return 
+		if err == nil {
+			ctx.Redirect(http.StatusFound, cachedResult)
+			return
+		} else if err == redis.Nil {
+
+			mongoCtx, mongoCancel := context.WithTimeout(context.Background(), 3*time.Second)
+			defer mongoCancel()
+			urlCollection := database.OpenCollection("urls", database.Client)
+
+			filter := bson.D{{
+				Key: "shortened_url", Value: shortcode,
+			}}
+
+			var url models.URL
+			err = urlCollection.FindOne(mongoCtx, filter).Decode(&url)
+
+			if err != nil {
+				ctx.JSON(http.StatusNotFound, gin.H{"error": "URL not found", "details": err.Error()})
+				return
+			}
+
+			redisSetCtx, redisSetCancel:= context.WithTimeout(context.Background(), 3*time.Second)
+			defer redisSetCancel()
+			_,err:=database.RedisClient.Set(redisSetCtx,key,url.OriginalURL,time.Hour).Result()
+			if err != nil {
+				ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Key couldn't be set in redis","details": err.Error()})
+				return
+			}
+
+			ctx.Redirect(http.StatusFound, url.OriginalURL)
+			return
+		} else {
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Redis internal error","details": err.Error()})
+				return
 		}
 
-		ctx.Redirect(http.StatusFound,url.OriginalURL)
 	}
 }

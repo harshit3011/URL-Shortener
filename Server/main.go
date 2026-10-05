@@ -34,6 +34,8 @@ func main() {
 	}
 	log.Println("MongoDB connected successfully!")
 
+	database.ConnectRedis()
+
 	defer func(){
 		if err:=client.Disconnect(context.Background()); err!=nil{
 			log.Fatalf("Failed to disconnect from MongoDB: %v", err)
