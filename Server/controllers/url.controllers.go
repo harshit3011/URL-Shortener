@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"log"
 	"math/big"
 	"net/http"
 	"time"
@@ -174,10 +175,11 @@ func RedirectUrl() gin.HandlerFunc {
 		cachedResult, err := database.RedisClient.Get(redisGetCtx, key).Result()
 
 		if err == nil {
+			log.Printf("Redis cache HIT: shortcode=%s", shortcode)
 			ctx.Redirect(http.StatusFound, cachedResult)
 			return
 		} else if err == redis.Nil {
-
+			log.Printf("Redis cache MISS: shortcode=%s", shortcode)
 			_, err, _ := urlGroup.Do(shortcode, func() (interface{}, error) {
 				mongoCtx, mongoCancel := context.WithTimeout(context.Background(), 3*time.Second)
 				defer mongoCancel()
