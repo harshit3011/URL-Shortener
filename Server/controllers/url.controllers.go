@@ -13,7 +13,10 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
+	"golang.org/x/sync/singleflight"
 )
+
+var urlGroup singleflight.Group
 
 func GetUrls() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
@@ -175,35 +178,41 @@ func RedirectUrl() gin.HandlerFunc {
 			return
 		} else if err == redis.Nil {
 
-			mongoCtx, mongoCancel := context.WithTimeout(context.Background(), 3*time.Second)
-			defer mongoCancel()
-			urlCollection := database.OpenCollection("urls", database.Client)
+			_, err, _ := urlGroup.Do(shortcode, func() (interface{}, error) {
+				mongoCtx, mongoCancel := context.WithTimeout(context.Background(), 3*time.Second)
+				defer mongoCancel()
+				urlCollection := database.OpenCollection("urls", database.Client)
 
-			filter := bson.D{{
-				Key: "shortened_url", Value: shortcode,
-			}}
+				filter := bson.D{{
+					Key: "shortened_url", Value: shortcode,
+				}}
 
-			var url models.URL
-			err = urlCollection.FindOne(mongoCtx, filter).Decode(&url)
+				var url models.URL
+				err = urlCollection.FindOne(mongoCtx, filter).Decode(&url)
 
+				if err != nil {
+					ctx.JSON(http.StatusNotFound, gin.H{"error": "URL not found", "details": err.Error()})
+					return nil, err
+				}
+
+				redisSetCtx, redisSetCancel := context.WithTimeout(context.Background(), 3*time.Second)
+				defer redisSetCancel()
+				_, err := database.RedisClient.Set(redisSetCtx, key, url.OriginalURL, time.Hour).Result()
+				if err != nil {
+					ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Key couldn't be set in redis", "details": err.Error()})
+					return nil, err
+				}
+
+				ctx.Redirect(http.StatusFound, url.OriginalURL)
+				return url.OriginalURL, nil
+			})
 			if err != nil {
-				ctx.JSON(http.StatusNotFound, gin.H{"error": "URL not found", "details": err.Error()})
+				ctx.JSON(http.StatusInternalServerError, gin.H{"error": "SingleFlight error", "details": err.Error()})
 				return
 			}
-
-			redisSetCtx, redisSetCancel:= context.WithTimeout(context.Background(), 3*time.Second)
-			defer redisSetCancel()
-			_,err:=database.RedisClient.Set(redisSetCtx,key,url.OriginalURL,time.Hour).Result()
-			if err != nil {
-				ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Key couldn't be set in redis","details": err.Error()})
-				return
-			}
-
-			ctx.Redirect(http.StatusFound, url.OriginalURL)
-			return
 		} else {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Redis internal error","details": err.Error()})
-				return
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Redis internal error", "details": err.Error()})
+			return
 		}
 
 	}

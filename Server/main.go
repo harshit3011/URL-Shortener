@@ -34,6 +34,7 @@ func main() {
 	}
 	log.Println("MongoDB connected successfully!")
 
+	database.CreateIndexes()
 	database.ConnectRedis()
 
 	defer func(){
