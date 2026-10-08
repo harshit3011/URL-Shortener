@@ -11,6 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/harshit3011/URL-Shortener/database"
+	"github.com/harshit3011/URL-Shortener/kafka"
 	"github.com/harshit3011/URL-Shortener/middleware"
 	"github.com/harshit3011/URL-Shortener/routes"
 	"github.com/joho/godotenv"
@@ -23,7 +24,7 @@ func main() {
 	router.Use(middleware.Observability())
 	err := godotenv.Load(".env")
 	if err != nil {
-		log.Fatal("Unable to find .env file")
+		log.Println("No .env file found, using environment variables")
 	}
 	client := database.ConnectDB()
 
@@ -42,6 +43,15 @@ func main() {
 
 	database.CreateIndexes()
 	database.ConnectRedis()
+
+	kafka.InitProducer()
+	kafka.InitConsumer()
+	consumerCtx, stopConsumer := context.WithCancel(context.Background())
+	consumerDone := make(chan struct{})
+	go func() {
+		defer close(consumerDone)
+		kafka.ConsumeClicks(consumerCtx)
+	}()
 
 	defer func() {
 		if err := database.RedisClient.Close(); err != nil {
@@ -75,6 +85,11 @@ func main() {
 	<-quit
 
 	log.Println("Shutting down server...")
+	stopConsumer()
+	if err := kafka.Reader.Close(); err != nil {
+		log.Printf("Failed to close Kafka consumer: %v", err)
+	}
+	<-consumerDone
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

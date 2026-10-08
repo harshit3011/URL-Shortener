@@ -2,13 +2,17 @@ package controllers
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"log"
 	"math/big"
 	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/harshit3011/URL-Shortener/database"
+	"github.com/harshit3011/URL-Shortener/kafka"
 	"github.com/harshit3011/URL-Shortener/models"
 	"github.com/redis/go-redis/v9"
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -176,6 +180,16 @@ func RedirectUrl() gin.HandlerFunc {
 
 		if err == nil {
 			log.Printf("Redis cache HIT: shortcode=%s", shortcode)
+
+			err := RecordClick(shortcode)
+			if err != nil {
+				ctx.JSON(http.StatusInternalServerError, gin.H{
+					"error":   "Click couldn't be recorded",
+					"details": err.Error(),
+				})
+				return
+			}
+
 			ctx.Redirect(http.StatusFound, cachedResult)
 			return
 		} else if err == redis.Nil {
@@ -205,6 +219,15 @@ func RedirectUrl() gin.HandlerFunc {
 					return nil, err
 				}
 
+				err = RecordClick(shortcode)
+				if err != nil {
+					ctx.JSON(http.StatusInternalServerError, gin.H{
+						"error":   "Click couldn't be recorded",
+						"details": err.Error(),
+					})
+					return nil, err
+				}
+
 				ctx.Redirect(http.StatusFound, url.OriginalURL)
 				return url.OriginalURL, nil
 			})
@@ -218,4 +241,34 @@ func RedirectUrl() gin.HandlerFunc {
 		}
 
 	}
+}
+
+func RecordClick(shortcode string) error {
+	clicksCollection := database.OpenCollection("clicks", database.Client)
+
+	click := models.Click{
+		ID:        uuid.New().String(),
+		Shortcode: shortcode,
+		ClickedAt: time.Now(),
+	}
+
+	message, err := json.Marshal(click)
+	if err != nil {
+		return fmt.Errorf("encode click event: %w", err)
+	}
+
+	c, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	_, err = clicksCollection.InsertOne(c, click)
+	if err != nil {
+		return err
+	}
+
+	kafkaCtx, kafkaCancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer kafkaCancel()
+	if err := kafka.PublishClick(kafkaCtx, message); err != nil {
+		return fmt.Errorf("publish click event: %w", err)
+	}
+
+	return nil
 }
