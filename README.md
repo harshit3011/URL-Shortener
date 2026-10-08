@@ -8,8 +8,8 @@ A lightweight URL shortener service built with Go, MongoDB, Redis, and Kafka. It
 - JWT based authentication with access and refresh tokens
 - URL shortening and listing for authenticated users
 - Redirect handling with Redis caching for faster lookups
-- Click tracking and Kafka event publishing for analytics
-- MongoDB backed storage and Docker based local setup
+- Click tracking and Kafka-based event publishing for analytics
+- MongoDB backed storage and Docker-based local setup
 
 ## Tech Stack
 
